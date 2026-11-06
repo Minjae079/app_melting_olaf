@@ -1,4 +1,5 @@
-import 'package:flutter/material.dart';
+
+import 'package:flutter/cupertino.dart';
 import 'app_shell.dart';
 
 void main() {
@@ -10,18 +11,22 @@ class TempAlertApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return MaterialApp(
+    return const CupertinoApp(
       debugShowCheckedModeBanner: false,
-      title: '배관 동파 모니터링',
-      theme: ThemeData(
-        useMaterial3: true,
-        colorScheme: ColorScheme.fromSeed(
-          seedColor: const Color(0xFF2563EB),
+      title: 'Pipe Guard',
+      theme: CupertinoThemeData(
+        brightness: Brightness.light,
+        primaryColor: Color(0xFF007AFF),
+        scaffoldBackgroundColor: Color(0xFFF2F2F7),
+        barBackgroundColor: Color(0xEEFFFFFF),
+        textTheme: CupertinoTextThemeData(
+          textStyle: TextStyle(
+            fontSize: 16,
+            color: Color(0xFF1C1C1E),
+          ),
         ),
-        scaffoldBackgroundColor:
-            const Color(0xFFF5F7FB),
       ),
-      home: const AppShell(),
+      home: AppShell(),
     );
   }
 }

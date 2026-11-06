@@ -1,7 +1,9 @@
 
 import 'dart:async';
 
-import 'package:flutter/material.dart';
+import 'package:flutter/cupertino.dart';
+import 'package:flutter/material.dart'
+    show BottomNavigationBarItem;
 
 import 'models/sensor_data.dart';
 import 'services/temperature_service.dart';
@@ -26,6 +28,7 @@ class _AppShellState extends State<AppShell> {
   bool demoMode = true;
   bool connected = false;
   bool loading = false;
+  bool pendingRefresh = false;
   bool warningShown = false;
 
   String? error;
@@ -50,18 +53,20 @@ class _AppShellState extends State<AppShell> {
   }
 
   Future<void> loadData() async {
-    if (loading) return;
+    if (loading) {
+      pendingRefresh = true;
+      return;
+    }
 
     loading = true;
-    final currentVersion = modeVersion;
+    final version = modeVersion;
 
     try {
       final SensorSnapshot data = demoMode
           ? service.createDemoData()
           : await service.fetchRealData();
 
-      if (!mounted ||
-          currentVersion != modeVersion) {
+      if (!mounted || version != modeVersion) {
         return;
       }
 
@@ -72,11 +77,11 @@ class _AppShellState extends State<AppShell> {
         error = null;
         latest = data;
 
-        final isNew =
+        final newSample =
             data.sequence == null ||
             data.sequence != lastSequence;
 
-        if (isNew) {
+        if (newSample) {
           lastSequence = data.sequence;
           lastUpdated = now;
 
@@ -101,37 +106,50 @@ class _AppShellState extends State<AppShell> {
           }
         }
 
-        // Keep only 60 seconds of readings
         history1.removeWhere(
-          (point) =>
-              now.difference(point.time) >
-              const Duration(seconds: 60),
+          (p) =>
+              now.difference(p.time).inSeconds > 60,
         );
 
         history2.removeWhere(
-          (point) =>
-              now.difference(point.time) >
-              const Duration(seconds: 60),
+          (p) =>
+              now.difference(p.time).inSeconds > 60,
         );
       });
 
       if (data.anyDanger && !warningShown) {
         warningShown = true;
 
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text(
-              '동파 위험! 센서 상태를 확인하세요.',
-            ),
-            backgroundColor: Colors.red,
-          ),
-        );
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (!mounted) return;
+
+          showCupertinoDialog<void>(
+            context: context,
+            builder: (dialogContext) {
+              return CupertinoAlertDialog(
+                title: const Text('동파 위험 감지'),
+                content: const Text(
+                  '센서에서 위험한 온도 변화가 '
+                  '감지되었습니다.\n'
+                  '센서 모니터링 화면을 확인하세요.',
+                ),
+                actions: [
+                  CupertinoDialogAction(
+                    child: const Text('확인'),
+                    onPressed: () {
+                      Navigator.of(dialogContext).pop();
+                    },
+                  ),
+                ],
+              );
+            },
+          );
+        });
       } else if (!data.anyDanger) {
         warningShown = false;
       }
     } catch (e) {
-      if (!mounted ||
-          currentVersion != modeVersion) {
+      if (!mounted || version != modeVersion) {
         return;
       }
 
@@ -141,6 +159,11 @@ class _AppShellState extends State<AppShell> {
       });
     } finally {
       loading = false;
+
+      if (pendingRefresh && mounted) {
+        pendingRefresh = false;
+        scheduleMicrotask(loadData);
+      }
     }
   }
 
@@ -150,8 +173,8 @@ class _AppShellState extends State<AppShell> {
       demoMode = value;
 
       connected = false;
-      error = null;
       latest = null;
+      error = null;
       lastUpdated = null;
       lastSequence = null;
       warningShown = false;
@@ -173,65 +196,72 @@ class _AppShellState extends State<AppShell> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text(
-          'PIPE GUARD',
-          style: TextStyle(
-            fontWeight: FontWeight.bold,
-            letterSpacing: 1,
-          ),
-        ),
-        backgroundColor: Colors.white,
-      ),
-
-      body: SafeArea(
-        child: IndexedStack(
-          index: selectedTab,
+    return CupertinoPageScaffold(
+      backgroundColor: const Color(0xFFF2F2F7),
+      child: SafeArea(
+        bottom: false,
+        child: Column(
           children: [
-            HomePage(
-              connected: connected,
-              demoMode: demoMode,
-              data: latest,
-              lastUpdated: lastUpdated,
-              error: error,
-              onOpenMenu: openMenu,
+            Expanded(
+              child: IndexedStack(
+                index: selectedTab,
+                children: [
+                  HomePage(
+                    connected: connected,
+                    demoMode: demoMode,
+                    data: latest,
+                    lastUpdated: lastUpdated,
+                    error: error,
+                    onOpenMenu: openMenu,
+                  ),
+
+                  MenuPage(
+                    connected: connected,
+                    demoMode: demoMode,
+                    data: latest,
+                    error: error,
+                    history1: history1,
+                    history2: history2,
+                    onModeChanged: changeMode,
+                  ),
+                ],
+              ),
             ),
 
-            MenuPage(
-              connected: connected,
-              demoMode: demoMode,
-              data: latest,
-              error: error,
-              history1: history1,
-              history2: history2,
-              onModeChanged: changeMode,
+            CupertinoTabBar(
+              currentIndex: selectedTab,
+              backgroundColor:
+                  const Color(0xEEFFFFFF),
+              activeColor:
+                  const Color(0xFF007AFF),
+              inactiveColor:
+                  const Color(0xFF8E8E93),
+              onTap: (index) {
+                setState(() {
+                  selectedTab = index;
+                });
+              },
+              items: const [
+                BottomNavigationBarItem(
+                  icon: Icon(CupertinoIcons.house),
+                  activeIcon: Icon(
+                    CupertinoIcons.house_fill,
+                  ),
+                  label: '홈',
+                ),
+                BottomNavigationBarItem(
+                  icon: Icon(
+                    CupertinoIcons.waveform_path_ecg,
+                  ),
+                  activeIcon: Icon(
+                    CupertinoIcons.waveform_path_ecg,
+                  ),
+                  label: '센서',
+                ),
+              ],
             ),
           ],
         ),
-      ),
-
-      bottomNavigationBar: NavigationBar(
-        selectedIndex: selectedTab,
-        onDestinationSelected: (index) {
-          setState(() {
-            selectedTab = index;
-          });
-        },
-        destinations: const [
-          NavigationDestination(
-            icon: Icon(Icons.home_outlined),
-            selectedIcon: Icon(Icons.home),
-            label: '홈',
-          ),
-          NavigationDestination(
-            icon: Icon(Icons.menu_rounded),
-            selectedIcon: Icon(
-              Icons.sensors_rounded,
-            ),
-            label: '메뉴',
-          ),
-        ],
       ),
     );
   }
