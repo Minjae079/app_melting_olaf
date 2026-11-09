@@ -1,4 +1,0 @@
-project_id = "pimrwslkvqumueidurir"
-
-[functions.ingest-temperature]
-verify_jwt = false
