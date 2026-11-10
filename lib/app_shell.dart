@@ -44,7 +44,7 @@ class _AppShellState extends State<AppShell> {
     loadData();
 
     timer = Timer.periodic(
-      const Duration(seconds: 2),
+      const Duration(seconds: 1),
       (_) => loadData(),
     );
   }
