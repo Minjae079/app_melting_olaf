@@ -1,14 +1,15 @@
 import { createClient } from "npm:@supabase/supabase-js@2";
 
-const jsonHeaders = {
-  "Content-Type": "application/json",
-};
+const jsonHeaders = { "Content-Type": "application/json" };
 
 function jsonResponse(body: Record<string, unknown>, status: number) {
-  return new Response(JSON.stringify(body), {
-    status,
-    headers: jsonHeaders,
-  });
+  return new Response(JSON.stringify(body), { status, headers: jsonHeaders });
+}
+
+function isValidDeviceId(value: unknown): value is string {
+  return (
+    typeof value === "string" && /^[a-zA-Z0-9_-]{1,64}$/.test(value)
+  );
 }
 
 function isValidTemperature(value: unknown): value is number {
@@ -49,6 +50,103 @@ Deno.serve(async (request) => {
   }
 
   const deviceId = payload.deviceId;
+
+  if (!isValidDeviceId(deviceId)) {
+    return jsonResponse({ error: "Invalid deviceId" }, 400);
+  }
+
+  const supabaseUrl = Deno.env.get("SUPABASE_URL");
+  const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+
+  if (!supabaseUrl || !serviceRoleKey) {
+    return jsonResponse({ error: "Server configuration error" }, 500);
+  }
+
+  const supabase = createClient(supabaseUrl, serviceRoleKey, {
+    auth: { persistSession: false },
+  });
+
+  if (payload.action === "start") {
+    const sessionName = payload.sessionName;
+    const sensor1Present = payload.sensor1Present;
+    const sensor2Present = payload.sensor2Present;
+
+    if (
+      sessionName !== undefined &&
+      (typeof sessionName !== "string" || sessionName.trim().length > 100)
+    ) {
+      return jsonResponse({ error: "Invalid sessionName" }, 400);
+    }
+
+    if (
+      typeof sensor1Present !== "boolean" ||
+      typeof sensor2Present !== "boolean"
+    ) {
+      return jsonResponse({ error: "Invalid sensor presence" }, 400);
+    }
+
+    const { error: closeError } = await supabase
+      .from("experiment_sessions")
+      .update({ ended_at: new Date().toISOString() })
+      .eq("device_id", deviceId)
+      .is("ended_at", null);
+
+    if (closeError) {
+      console.error("Failed to close previous sessions", closeError);
+      return jsonResponse({ error: "Failed to close previous session" }, 500);
+    }
+
+    const { data: session, error: sessionError } = await supabase
+      .from("experiment_sessions")
+      .insert({
+        device_id: deviceId,
+        session_name: typeof sessionName === "string"
+          ? sessionName.trim() || null
+          : null,
+      })
+      .select("id, started_at")
+      .single();
+
+    if (sessionError || !session) {
+      console.error("Failed to create experiment session", sessionError);
+      return jsonResponse({ error: "Failed to create session" }, 500);
+    }
+
+    const { error: sensorsError } = await supabase
+      .from("experiment_session_sensors")
+      .insert([
+        {
+          session_id: session.id,
+          sensor_slot: "sensor1",
+          sensor_name: "Sensor D2",
+          stage_number: 1,
+          is_present: sensor1Present,
+        },
+        {
+          session_id: session.id,
+          sensor_slot: "sensor2",
+          sensor_name: "Sensor D3",
+          stage_number: 2,
+          is_present: sensor2Present,
+        },
+      ]);
+
+    if (sensorsError) {
+      console.error("Failed to register session sensors", sensorsError);
+      await supabase.from("experiment_sessions").delete().eq("id", session.id);
+      return jsonResponse({ error: "Failed to register sensors" }, 500);
+    }
+
+    return jsonResponse(
+      {
+        ok: true,
+        sessionId: session.id,
+        startedAt: session.started_at,
+      },
+      201,
+    );
+  }
+
   const sessionId = payload.sessionId;
   const sampleIndex = payload.sampleIndex;
   const measuredAt = payload.measuredAt;
@@ -57,18 +155,9 @@ Deno.serve(async (request) => {
   const sensor2 = payload.sensor2;
 
   if (
-    typeof deviceId !== "string" ||
-    !/^[a-zA-Z0-9_-]{1,64}$/.test(deviceId)
-  ) {
-    return jsonResponse({ error: "Invalid deviceId" }, 400);
-  }
-
-  if (
     typeof sessionId !== "string" ||
     !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
-      .test(
-        sessionId,
-      )
+      .test(sessionId)
   ) {
     return jsonResponse({ error: "Invalid sessionId" }, 400);
   }
@@ -99,17 +188,6 @@ Deno.serve(async (request) => {
   if (sensor1 === null && sensor2 === null) {
     return jsonResponse({ error: "At least one sensor must be present" }, 400);
   }
-
-  const supabaseUrl = Deno.env.get("SUPABASE_URL");
-  const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
-
-  if (!supabaseUrl || !serviceRoleKey) {
-    return jsonResponse({ error: "Server configuration error" }, 500);
-  }
-
-  const supabase = createClient(supabaseUrl, serviceRoleKey, {
-    auth: { persistSession: false },
-  });
 
   const { data: session, error: sessionError } = await supabase
     .from("experiment_sessions")

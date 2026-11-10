@@ -48,3 +48,7 @@ app.*.map.json
 .widget_preview/
 
 /supabase/.temp/
+
+# Arduino secrets
+/arduino/**/arduino_secrets.h
+/arduino/**/.DS_Store
