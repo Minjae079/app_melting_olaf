@@ -222,13 +222,13 @@ def demo_worker(sensor2_error):
 
             "anyDanger": danger1 or danger2,
             "anySensorError": sensor2_error,
-            "uptimeSeconds": 2 * index,
+            "uptimeSeconds": index,
         }
 
         update_latest(data)
 
         index += 1
-        time.sleep(2)
+        time.sleep(1)
 
 
 # =====================================
