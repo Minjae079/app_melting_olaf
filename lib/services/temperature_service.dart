@@ -1,14 +1,14 @@
-
-import 'dart:convert';
 import 'dart:math' as math;
 
-import 'package:http/http.dart' as http;
+import 'package:supabase_flutter/supabase_flutter.dart';
+
 import '../models/sensor_data.dart';
 
 class TemperatureService {
-  // Android Emulator -> Windows USB server
-  static const String url =
-      'http://10.0.2.2:8765/temperature';
+  TemperatureService({SupabaseClient? client})
+    : _client = client ?? Supabase.instance.client;
+
+  final SupabaseClient _client;
 
   int _demoStep = 0;
 
@@ -16,58 +16,106 @@ class TemperatureService {
     _demoStep = 0;
   }
 
-  // Actual Arduino data through Python
-  Future<SensorSnapshot> fetchRealData() async {
-    final response = await http
-        .get(Uri.parse(url))
-        .timeout(const Duration(seconds: 3));
+  Future<TemperatureBatch> fetchLatestData() async {
+    final rows = await _client
+        .from('temperature_readings')
+        .select('id, sensor1, sensor2, measured_at')
+        .order('measured_at', ascending: false)
+        .limit(60)
+        .timeout(const Duration(seconds: 5));
 
-    if (response.statusCode != 200) {
-      throw Exception(
-        '데이터 수신 실패: HTTP ${response.statusCode}',
+    if (rows.isEmpty) {
+      throw StateError('저장된 온도 데이터가 없습니다.');
+    }
+
+    final latest = rows.first;
+    final latestAt = DateTime.tryParse(latest['measured_at']?.toString() ?? '');
+
+    double? slopeFor(String key) {
+      final newest = parseNumber(latest[key]);
+      final oldestRow = rows.last;
+      final oldest = parseNumber(oldestRow[key]);
+      final oldestAt = DateTime.tryParse(
+        oldestRow['measured_at']?.toString() ?? '',
+      );
+      if (newest == null ||
+          oldest == null ||
+          latestAt == null ||
+          oldestAt == null) {
+        return null;
+      }
+      final minutes = latestAt.difference(oldestAt).inMilliseconds / 60000;
+      return minutes > 0 ? (newest - oldest) / minutes : null;
+    }
+
+    SensorData sensor(String key) {
+      final temperature = parseNumber(latest[key]);
+      final slope = slopeFor(key);
+      final eta =
+          temperature != null && slope != null && slope < 0 && temperature > 2
+          ? (temperature - 2) / -slope
+          : null;
+      final danger =
+          temperature != null &&
+          (temperature <= 2 ||
+              (temperature <= 12 &&
+                  slope != null &&
+                  slope <= -0.3 &&
+                  eta != null &&
+                  eta <= 15));
+      return SensorData(
+        ok: temperature != null,
+        temperature: temperature,
+        slope: slope,
+        etaMinutes: eta,
+        danger: danger,
       );
     }
 
-    final decoded = jsonDecode(response.body);
+    final snapshot = SensorSnapshot(
+      sensor1: sensor('sensor1'),
+      sensor2: sensor('sensor2'),
+      sequence: (latest['id'] as num?)?.toInt(),
+      measuredAt: latestAt,
+    );
 
-    if (decoded is! Map<String, dynamic>) {
-      throw const FormatException(
-        '잘못된 센서 데이터 형식',
-      );
+    final sensor1History = <TemperaturePoint>[];
+    final sensor2History = <TemperaturePoint>[];
+    for (final row in rows.reversed) {
+      final time = DateTime.tryParse(row['measured_at']?.toString() ?? '');
+      if (time == null) continue;
+      final sensor1 = parseNumber(row['sensor1']);
+      final sensor2 = parseNumber(row['sensor2']);
+      if (sensor1 != null) sensor1History.add(TemperaturePoint(time, sensor1));
+      if (sensor2 != null) sensor2History.add(TemperaturePoint(time, sensor2));
     }
 
-    return SensorSnapshot.fromJson(decoded);
+    return TemperatureBatch(
+      latest: snapshot,
+      sensor1History: sensor1History,
+      sensor2History: sensor2History,
+    );
   }
 
   // Simulated data for UI testing
   SensorSnapshot createDemoData() {
     final step = _demoStep++;
 
-    final temp1 = math.max(
-      -5.0,
-      13.0 - step * 0.035,
-    );
+    final temp1 = math.max(-5.0, 13.0 - step * 0.035);
 
-    final temp2 = math.max(
-      -5.0,
-      14.0 - step * 0.045,
-    );
+    final temp2 = math.max(-5.0, 14.0 - step * 0.045);
 
-    final double? slope1 =
-        step >= 5 && temp1 > -5 ? -1.05 : null;
+    final double? slope1 = step >= 5 && temp1 > -5 ? -1.05 : null;
 
-    final double? slope2 =
-        step >= 5 && temp2 > -5 ? -1.35 : null;
+    final double? slope2 = step >= 5 && temp2 > -5 ? -1.35 : null;
 
-    final double? eta1 =
-        slope1 != null && temp1 > 2
-            ? (temp1 - 2) / -slope1
-            : null;
+    final double? eta1 = slope1 != null && temp1 > 2
+        ? (temp1 - 2) / -slope1
+        : null;
 
-    final double? eta2 =
-        slope2 != null && temp2 > 2
-            ? (temp2 - 2) / -slope2
-            : null;
+    final double? eta2 = slope2 != null && temp2 > 2
+        ? (temp2 - 2) / -slope2
+        : null;
 
     final danger1 =
         temp1 <= 2 ||
@@ -101,6 +149,7 @@ class TemperatureService {
         danger: danger2,
       ),
       sequence: step,
+      measuredAt: DateTime.now(),
     );
   }
 }

@@ -1,4 +1,3 @@
-
 double? parseNumber(dynamic value) {
   if (value is num) {
     final result = value.toDouble();
@@ -27,54 +26,45 @@ class SensorSnapshot {
   final SensorData sensor1;
   final SensorData sensor2;
   final int? sequence;
+  final DateTime? measuredAt;
 
   const SensorSnapshot({
     required this.sensor1,
     required this.sensor2,
     this.sequence,
+    this.measuredAt,
   });
 
-  int get workingCount =>
-      (sensor1.ok ? 1 : 0) +
-      (sensor2.ok ? 1 : 0);
+  int get workingCount => (sensor1.ok ? 1 : 0) + (sensor2.ok ? 1 : 0);
 
   bool get anyDanger =>
-      (sensor1.ok && sensor1.danger) ||
-      (sensor2.ok && sensor2.danger);
+      (sensor1.ok && sensor1.danger) || (sensor2.ok && sensor2.danger);
 
-  bool get anySensorError =>
-      !sensor1.ok || !sensor2.ok;
+  bool get anySensorError => !sensor1.ok || !sensor2.ok;
 
-  factory SensorSnapshot.fromJson(
-    Map<String, dynamic> json,
-  ) {
+  factory SensorSnapshot.fromJson(Map<String, dynamic> json) {
     final temp1 = parseNumber(json['temperature']);
     final temp2 = parseNumber(json['temperature2']);
 
     return SensorSnapshot(
       sensor1: SensorData(
-        ok: json['sensorOk'] == true &&
-            temp1 != null,
+        ok: json['sensorOk'] == true && temp1 != null,
         temperature: temp1,
         slope: parseNumber(json['slope']),
-        etaMinutes: parseNumber(
-          json['etaMinutes'],
-        ),
+        etaMinutes: parseNumber(json['etaMinutes']),
         danger: json['danger'] == true,
       ),
       sensor2: SensorData(
-        ok: json['sensor2Ok'] == true &&
-            temp2 != null,
+        ok: json['sensor2Ok'] == true && temp2 != null,
         temperature: temp2,
         slope: parseNumber(json['slope2']),
-        etaMinutes: parseNumber(
-          json['etaMinutes2'],
-        ),
+        etaMinutes: parseNumber(json['etaMinutes2']),
         danger: json['danger2'] == true,
       ),
       sequence: json['sequence'] is num
           ? (json['sequence'] as num).toInt()
           : null,
+      measuredAt: DateTime.tryParse(json['measuredAt']?.toString() ?? ''),
     );
   }
 }
@@ -84,4 +74,16 @@ class TemperaturePoint {
   final double value;
 
   const TemperaturePoint(this.time, this.value);
+}
+
+class TemperatureBatch {
+  final SensorSnapshot latest;
+  final List<TemperaturePoint> sensor1History;
+  final List<TemperaturePoint> sensor2History;
+
+  const TemperatureBatch({
+    required this.latest,
+    required this.sensor1History,
+    required this.sensor2History,
+  });
 }
