@@ -1,15 +1,8 @@
-
 import 'package:flutter/material.dart';
+
 import '../models/sensor_data.dart';
 
 class HomePage extends StatelessWidget {
-  final bool connected;
-  final bool demoMode;
-  final SensorSnapshot? data;
-  final DateTime? lastUpdated;
-  final String? error;
-  final VoidCallback onOpenMenu;
-
   const HomePage({
     super.key,
     required this.connected,
@@ -20,231 +13,147 @@ class HomePage extends StatelessWidget {
     required this.onOpenMenu,
   });
 
-  String formatTime(DateTime? time) {
-    if (time == null) return '수신 기록 없음';
+  final bool connected;
+  final bool demoMode;
+  final SensorSnapshot? data;
+  final DateTime? lastUpdated;
+  final String? error;
+  final VoidCallback onOpenMenu;
 
-    String two(int n) =>
-        n.toString().padLeft(2, '0');
-
-    return '${two(time.hour)}:'
-        '${two(time.minute)}:'
-        '${two(time.second)}';
-  }
-
-  Widget infoRow(String label, String value) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(
-        vertical: 12,
-      ),
-      child: Row(
-        children: [
-          Expanded(
-            child: Text(
-              label,
-              style: const TextStyle(
-                color: Colors.black54,
-              ),
-            ),
-          ),
-          Text(
-            value,
-            style: const TextStyle(
-              fontWeight: FontWeight.bold,
-            ),
-          ),
-        ],
-      ),
-    );
+  String _time(DateTime? value) {
+    if (value == null) return '기록 없음';
+    String two(int number) => number.toString().padLeft(2, '0');
+    return '${two(value.hour)}:${two(value.minute)}:${two(value.second)}';
   }
 
   @override
   Widget build(BuildContext context) {
-    final danger =
-        connected && (data?.anyDanger ?? false);
-
-    final sensorError =
-        connected && (data?.anySensorError ?? false);
-
-    final Color statusColor = !connected
-        ? Colors.blueGrey
+    final danger = connected && (data?.anyDanger ?? false);
+    final sensorError = connected && (data?.anySensorError ?? false);
+    final title = !connected
+        ? '연결 확인 중'
         : danger
-            ? Colors.red
-            : sensorError
-                ? Colors.orange
-                : Colors.green;
-
-    final String statusTitle = !connected
-        ? '연결 대기 중'
+        ? '주의가 필요해요'
+        : sensorError
+        ? '센서를 확인하세요'
+        : '현재 안전해요';
+    final description = !connected
+        ? 'Supabase에서 최근 측정값을 불러오고 있습니다.'
         : danger
-            ? '동파 위험 감지'
-            : sensorError
-                ? '센서 점검 필요'
-                : '배관 상태 정상';
-
-    final String description = !connected
-        ? '데이터 연결을 확인해주세요.'
-        : danger
-            ? '동파 위험 조건이 감지됐습니다.'
-            : sensorError
-                ? '일부 센서의 측정값을 확인할 수 없습니다.'
-                : '현재 동파 위험 조건이 감지되지 않았습니다.';
+        ? '온도가 빠르게 낮아지고 있습니다.'
+        : sensorError
+        ? '일부 센서의 값이 비어 있습니다.'
+        : '동파 위험 신호가 감지되지 않았습니다.';
+    final accent = danger
+        ? const Color(0xFF76554D)
+        : sensorError
+        ? const Color(0xFF746A52)
+        : const Color(0xFF586159);
 
     return ListView(
-      padding: const EdgeInsets.all(20),
+      padding: const EdgeInsets.fromLTRB(20, 24, 20, 32),
       children: [
-        const Text(
-          '안녕하세요!',
-          style: TextStyle(
-            fontSize: 28,
-            fontWeight: FontWeight.bold,
-          ),
+        Text(
+          '배관 상태',
+          style: Theme.of(context).textTheme.headlineMedium
+              ?.copyWith(fontWeight: FontWeight.w600, letterSpacing: -1),
         ),
-
-        const SizedBox(height: 6),
-
-        const Text(
-          '배관의 안전 상태를 확인하세요.',
-          style: TextStyle(
-            color: Colors.black54,
-          ),
+        const SizedBox(height: 8),
+        Text(
+          '마지막 측정 ${_time(lastUpdated)}',
+          style: const TextStyle(color: Color(0xFF777872)),
         ),
-
-        const SizedBox(height: 24),
-
-        // Overall system status
-        Container(
-          padding: const EdgeInsets.all(28),
-          decoration: BoxDecoration(
-            color: statusColor,
-            borderRadius:
-                BorderRadius.circular(22),
-          ),
-          child: Column(
-            children: [
-              Icon(
-                danger
-                    ? Icons.warning_amber_rounded
-                    : sensorError
-                        ? Icons.error_outline
-                        : connected
-                            ? Icons.shield_outlined
-                            : Icons.wifi_off,
-                size: 60,
-                color: Colors.white,
-              ),
-
-              const SizedBox(height: 18),
-
-              Text(
-                statusTitle,
-                style: const TextStyle(
-                  fontSize: 25,
-                  fontWeight: FontWeight.bold,
-                  color: Colors.white,
-                ),
-              ),
-
-              const SizedBox(height: 10),
-
-              Text(
-                description,
-                textAlign: TextAlign.center,
-                style: const TextStyle(
-                  color: Colors.white,
-                ),
-              ),
-            ],
-          ),
-        ),
-
-        const SizedBox(height: 22),
-
-        // Connection information
+        const SizedBox(height: 28),
         Card(
-          color: Colors.white,
           child: Padding(
-            padding: const EdgeInsets.all(20),
+            padding: const EdgeInsets.all(24),
             child: Column(
-              crossAxisAlignment:
-                  CrossAxisAlignment.start,
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Text(
-                  '시스템 상태',
-                  style: TextStyle(
-                    fontSize: 19,
-                    fontWeight: FontWeight.bold,
+                Container(
+                  width: 10,
+                  height: 10,
+                  decoration: BoxDecoration(
+                    color: accent,
+                    shape: BoxShape.circle,
                   ),
                 ),
-
-                const SizedBox(height: 14),
-
-                infoRow(
-                  '데이터 연결',
-                  connected ? '정상' : '연결 안 됨',
+                const SizedBox(height: 24),
+                Text(
+                  title,
+                  style: const TextStyle(
+                    fontSize: 25,
+                    fontWeight: FontWeight.w600,
+                    letterSpacing: -0.8,
+                  ),
                 ),
-
-                const Divider(height: 1),
-
-                infoRow(
-                  '정상 센서',
-                  '${connected ? (data?.workingCount ?? 0) : 0} / 2개',
-                ),
-
-                const Divider(height: 1),
-
-                infoRow(
-                  '데이터 모드',
-                  demoMode ? '테스트 모드' : 'Arduino USB',
-                ),
-
-                const Divider(height: 1),
-
-                infoRow(
-                  '마지막 수신',
-                  formatTime(lastUpdated),
+                const SizedBox(height: 8),
+                Text(
+                  description,
+                  style: const TextStyle(color: Color(0xFF696A65), height: 1.5),
                 ),
               ],
             ),
           ),
         ),
-
-        if (error != null) ...[
-          const SizedBox(height: 12),
-          Text(
-            error!,
-            style: const TextStyle(
-              color: Colors.red,
-              fontSize: 12,
+        const SizedBox(height: 14),
+        Card(
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+            child: Column(
+              children: [
+                _InfoRow(label: '데이터', value: connected ? '연결됨' : '연결 안 됨'),
+                const Divider(height: 1),
+                _InfoRow(
+                  label: '센서',
+                  value: '${connected ? data?.workingCount ?? 0 : 0} / 2',
+                ),
+                const Divider(height: 1),
+                _InfoRow(label: '소스', value: demoMode ? '데모 데이터' : 'Supabase'),
+              ],
             ),
           ),
-        ],
-
-        const SizedBox(height: 24),
-
-        FilledButton.icon(
-          onPressed: onOpenMenu,
-          icon: const Icon(
-            Icons.arrow_forward,
-          ),
-          label: const Text(
-            '센서 모니터링 확인하기',
-          ),
-          style: FilledButton.styleFrom(
-            padding: const EdgeInsets.all(18),
-          ),
         ),
-
-        const SizedBox(height: 18),
-
-        const Text(
-          '현재 버전에서는 앱이 실행 중일 때만 '
-          '위험 알림이 표시됩니다.',
-          style: TextStyle(
-            fontSize: 12,
-            color: Colors.black54,
+        if (error != null) ...[
+          const SizedBox(height: 14),
+          Text(
+            error!,
+            style: const TextStyle(color: Color(0xFF76554D), fontSize: 12),
           ),
+        ],
+        const SizedBox(height: 24),
+        OutlinedButton(
+          onPressed: onOpenMenu,
+          style: OutlinedButton.styleFrom(
+            foregroundColor: const Color(0xFF30312E),
+            side: const BorderSide(color: Color(0xFFCECEC7)),
+            padding: const EdgeInsets.symmetric(vertical: 17),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(14),
+            ),
+          ),
+          child: const Text('측정값 자세히 보기'),
         ),
       ],
     );
   }
+}
+
+class _InfoRow extends StatelessWidget {
+  const _InfoRow({required this.label, required this.value});
+  final String label;
+  final String value;
+
+  @override
+  Widget build(BuildContext context) => Padding(
+    padding: const EdgeInsets.symmetric(vertical: 15),
+    child: Row(
+      children: [
+        Expanded(
+          child: Text(label, style: const TextStyle(color: Color(0xFF777872))),
+        ),
+        Text(value, style: const TextStyle(fontWeight: FontWeight.w500)),
+      ],
+    ),
+  );
 }

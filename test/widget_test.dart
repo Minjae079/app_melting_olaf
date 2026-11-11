@@ -6,14 +6,24 @@
 // tree, read text, and verify that the values of widget properties are correct.
 
 import 'package:flutter_test/flutter_test.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:temp_alert_app/main.dart';
 
 void main() {
+  setUpAll(() async {
+    SharedPreferences.setMockInitialValues({});
+    await Supabase.initialize(
+      url: 'https://example.supabase.co',
+      publishableKey: 'sb_publishable_test',
+    );
+  });
+
   testWidgets('앱 기본 화면을 표시한다', (tester) async {
     await tester.pumpWidget(const TempAlertApp());
 
-    expect(find.text('PIPE GUARD'), findsOneWidget);
-    expect(find.text('안녕하세요!'), findsOneWidget);
+    expect(find.text('Pipe guard'), findsOneWidget);
+    expect(find.text('배관 상태'), findsOneWidget);
   });
 }

@@ -1,4 +1,3 @@
-
 import 'dart:async';
 
 import 'package:flutter/material.dart';
@@ -16,14 +15,13 @@ class AppShell extends StatefulWidget {
 }
 
 class _AppShellState extends State<AppShell> {
-  final TemperatureService service =
-      TemperatureService();
+  final TemperatureService service = TemperatureService();
 
   int selectedTab = 0;
   int modeVersion = 0;
   int? lastSequence;
 
-  bool demoMode = true;
+  bool demoMode = false;
   bool connected = false;
   bool loading = false;
   bool warningShown = false;
@@ -43,10 +41,7 @@ class _AppShellState extends State<AppShell> {
 
     loadData();
 
-    timer = Timer.periodic(
-      const Duration(seconds: 1),
-      (_) => loadData(),
-    );
+    timer = Timer.periodic(const Duration(seconds: 1), (_) => loadData());
   }
 
   Future<void> loadData() async {
@@ -56,12 +51,14 @@ class _AppShellState extends State<AppShell> {
     final currentVersion = modeVersion;
 
     try {
+      final TemperatureBatch? batch = demoMode
+          ? null
+          : await service.fetchLatestData();
       final SensorSnapshot data = demoMode
           ? service.createDemoData()
-          : await service.fetchRealData();
+          : batch!.latest;
 
-      if (!mounted ||
-          currentVersion != modeVersion) {
+      if (!mounted || currentVersion != modeVersion) {
         return;
       }
 
@@ -72,29 +69,32 @@ class _AppShellState extends State<AppShell> {
         error = null;
         latest = data;
 
-        final isNew =
-            data.sequence == null ||
-            data.sequence != lastSequence;
+        final isNew = data.sequence == null || data.sequence != lastSequence;
 
-        if (isNew) {
+        if (!demoMode && batch != null) {
+          history1
+            ..clear()
+            ..addAll(batch.sensor1History);
+          history2
+            ..clear()
+            ..addAll(batch.sensor2History);
+        } else if (isNew) {
           lastSequence = data.sequence;
-          lastUpdated = now;
+          lastUpdated = data.measuredAt ?? now;
 
-          if (data.sensor1.ok &&
-              data.sensor1.temperature != null) {
+          if (data.sensor1.ok && data.sensor1.temperature != null) {
             history1.add(
               TemperaturePoint(
-                now,
+                data.measuredAt ?? now,
                 data.sensor1.temperature!,
               ),
             );
           }
 
-          if (data.sensor2.ok &&
-              data.sensor2.temperature != null) {
+          if (data.sensor2.ok && data.sensor2.temperature != null) {
             history2.add(
               TemperaturePoint(
-                now,
+                data.measuredAt ?? now,
                 data.sensor2.temperature!,
               ),
             );
@@ -102,17 +102,14 @@ class _AppShellState extends State<AppShell> {
         }
 
         // Keep only 60 seconds of readings
-        history1.removeWhere(
-          (point) =>
-              now.difference(point.time) >
-              const Duration(seconds: 60),
-        );
-
-        history2.removeWhere(
-          (point) =>
-              now.difference(point.time) >
-              const Duration(seconds: 60),
-        );
+        if (demoMode) {
+          history1.removeWhere(
+            (point) => now.difference(point.time) > const Duration(seconds: 60),
+          );
+          history2.removeWhere(
+            (point) => now.difference(point.time) > const Duration(seconds: 60),
+          );
+        }
       });
 
       if (data.anyDanger && !warningShown) {
@@ -120,18 +117,15 @@ class _AppShellState extends State<AppShell> {
 
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
-            content: Text(
-              '동파 위험! 센서 상태를 확인하세요.',
-            ),
-            backgroundColor: Colors.red,
+            content: Text('동파 위험! 센서 상태를 확인하세요.'),
+            backgroundColor: Color(0xFF6F5149),
           ),
         );
       } else if (!data.anyDanger) {
         warningShown = false;
       }
     } catch (e) {
-      if (!mounted ||
-          currentVersion != modeVersion) {
+      if (!mounted || currentVersion != modeVersion) {
         return;
       }
 
@@ -176,13 +170,10 @@ class _AppShellState extends State<AppShell> {
     return Scaffold(
       appBar: AppBar(
         title: const Text(
-          'PIPE GUARD',
-          style: TextStyle(
-            fontWeight: FontWeight.bold,
-            letterSpacing: 1,
-          ),
+          'Pipe guard',
+          style: TextStyle(fontWeight: FontWeight.w600, letterSpacing: -0.2),
         ),
-        backgroundColor: Colors.white,
+        centerTitle: false,
       ),
 
       body: SafeArea(
@@ -226,10 +217,8 @@ class _AppShellState extends State<AppShell> {
           ),
           NavigationDestination(
             icon: Icon(Icons.menu_rounded),
-            selectedIcon: Icon(
-              Icons.sensors_rounded,
-            ),
-            label: '메뉴',
+            selectedIcon: Icon(Icons.sensors_rounded),
+            label: '모니터링',
           ),
         ],
       ),

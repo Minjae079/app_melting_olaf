@@ -1,4 +1,3 @@
-
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
@@ -16,21 +15,12 @@ class TemperatureChart extends StatelessWidget {
     required this.history2,
   });
 
-  List<FlSpot> makeSpots(
-    List<TemperaturePoint> history,
-    DateTime now,
-  ) {
+  List<FlSpot> makeSpots(List<TemperaturePoint> history, DateTime now) {
     return history.map((point) {
-      final secondsAgo = now
-              .difference(point.time)
-              .inMilliseconds /
-          1000.0;
+      final secondsAgo = now.difference(point.time).inMilliseconds / 1000.0;
 
       // Display last 60 seconds
-      final x = math.max(
-        0.0,
-        60.0 - secondsAgo,
-      );
+      final x = math.max(0.0, 60.0 - secondsAgo);
 
       return FlSpot(x, point.value);
     }).toList();
@@ -38,27 +28,28 @@ class TemperatureChart extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final all = [
-      ...history1,
-      ...history2,
-    ];
+    final all = [...history1, ...history2];
 
     if (all.length < 2) {
       return const SizedBox(
         height: 220,
         child: Center(
-          child: Text('온도 데이터 수집 중...'),
+          child: Text(
+            '온도 데이터를 기다리는 중',
+            style: TextStyle(color: Color(0xFF858680)),
+          ),
         ),
       );
     }
 
-    final now = DateTime.now();
+    final now = all
+        .map((point) => point.time)
+        .reduce((a, b) => a.isAfter(b) ? a : b);
 
     final spots1 = makeSpots(history1, now);
     final spots2 = makeSpots(history2, now);
 
-    final values =
-        all.map((point) => point.value).toList();
+    final values = all.map((point) => point.value).toList();
 
     final minTemp = values.reduce(math.min);
     final maxTemp = values.reduce(math.max);
@@ -67,17 +58,9 @@ class TemperatureChart extends StatelessWidget {
       children: [
         const Row(
           children: [
-            Icon(
-              Icons.circle,
-              size: 12,
-              color: Colors.blue,
-            ),
+            Icon(Icons.circle, size: 12, color: Color(0xFF3F413D)),
             Text(' 센서 1     '),
-            Icon(
-              Icons.circle,
-              size: 12,
-              color: Colors.teal,
-            ),
+            Icon(Icons.circle, size: 12, color: Color(0xFFA7A8A2)),
             Text(' 센서 2'),
           ],
         ),
@@ -93,39 +76,34 @@ class TemperatureChart extends StatelessWidget {
               minY: minTemp - 0.7,
               maxY: maxTemp + 0.7,
 
-              gridData: const FlGridData(
+              gridData: FlGridData(
                 show: true,
+                drawVerticalLine: false,
+                getDrawingHorizontalLine: (_) =>
+                    const FlLine(color: Color(0xFFE7E7E1), strokeWidth: 1),
               ),
 
-              titlesData: const FlTitlesData(
-                show: false,
-              ),
+              titlesData: const FlTitlesData(show: false),
 
-              borderData: FlBorderData(
-                show: false,
-              ),
+              borderData: FlBorderData(show: false),
 
               lineBarsData: [
                 if (spots1.isNotEmpty)
                   LineChartBarData(
                     spots: spots1,
                     isCurved: false,
-                    color: Colors.blue,
-                    barWidth: 3,
-                    dotData: const FlDotData(
-                      show: false,
-                    ),
+                    color: const Color(0xFF3F413D),
+                    barWidth: 2,
+                    dotData: const FlDotData(show: false),
                   ),
 
                 if (spots2.isNotEmpty)
                   LineChartBarData(
                     spots: spots2,
                     isCurved: false,
-                    color: Colors.teal,
-                    barWidth: 3,
-                    dotData: const FlDotData(
-                      show: false,
-                    ),
+                    color: const Color(0xFFA7A8A2),
+                    barWidth: 2,
+                    dotData: const FlDotData(show: false),
                   ),
               ],
             ),
@@ -135,11 +113,8 @@ class TemperatureChart extends StatelessWidget {
         const SizedBox(height: 8),
 
         const Text(
-          '최근 60초 온도 변화',
-          style: TextStyle(
-            fontSize: 12,
-            color: Colors.black54,
-          ),
+          'DB 최근 측정값 · 최대 60건',
+          style: TextStyle(fontSize: 12, color: Colors.black54),
         ),
       ],
     );
